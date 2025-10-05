@@ -1,0 +1,25 @@
+# direwolf.conf.example - Reference template
+# Copy to direwolf.conf and edit values.
+
+ADEVICE plughw:1,0
+ACHANNELS 1
+MODEM 1200
+MYCALL N0CALL-1
+
+# DIGI & Timing
+TXDELAY 300
+TXTAIL 30
+DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\d)$
+
+PBEACON delay=30 every=15 via=WIDE2-1 symbol=/r lat=39^00.00N long=104^00.00W alt=1800 \
+ comment="Sample Digi"
+PBEACON delay=180 every=45 symbol=/r lat=39^00.00N long=104^00.00W via=WIDE2-2 \
+ comment="Status Beacon"
+
+AGWPORT 8000
+KISSPORT 8001
+# LOGDIR /home/packet/digi/logs
+
+# IGLOGIN N0CALL-10 12345
+# IGSERVER noam.aprs2.net
+# IGFILTER r/39/-104/200

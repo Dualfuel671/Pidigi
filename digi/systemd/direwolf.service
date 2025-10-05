@@ -1,0 +1,24 @@
+[Unit]
+Description=Direwolf APRS Digipeater (packet user)
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=packet
+WorkingDirectory=/home/packet/digi
+ExecStart=/usr/local/bin/direwolf -c /home/packet/digi/direwolf.conf -t 0
+Restart=on-failure
+RestartSec=5
+Nice=-2
+
+NoNewPrivileges=yes
+ProtectSystem=full
+ProtectHome=false
+PrivateTmp=yes
+ProtectHostname=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+
+[Install]
+WantedBy=multi-user.target

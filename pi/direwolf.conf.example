@@ -1,0 +1,49 @@
+# direwolf.conf.example - APRS Digipeater baseline for Pi Zero 2 W + AIOC + Baofeng
+# Replace placeholders like MYCALL, coordinates, comments as needed.
+
+# Audio device (adjust to your card index). Use `arecord -l` to confirm.
+# For many USB sound devices it might be plughw:1,0
+ADEVICE plughw:1,0
+ACHANNELS 1
+
+# 1200 baud AFSK (standard APRS)
+MODEM 1200
+
+# Callsign-SSID (-1 typical for digi)
+MYCALL N0CALL-1
+
+# PTT via USB serial control line (adjust device & signal: RTS, DTR)
+# Uncomment and set if needed; some AIOC boards auto-PTT via VOX-like circuit.
+# PTT /dev/ttyUSB0 RTS
+
+# Transmission timing
+TXDELAY 300
+TXTAIL 30
+DWAIT 0
+SLOTTIME 0
+PERSIST 63
+
+# Digipeat WIDE1-1 fill-in and WIDE2-N
+DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\d)$
+
+# Primary beacon (quick ID). Adjust lat/long (DD^MM.mmN/E format) & symbol.
+PBEACON delay=15 every=15 via=WIDE2-1 symbol=/r lat=39^00.00N long=104^00.00W alt=1800 \
+  comment="Test Digi"
+
+# Secondary beacon (status) every 30 minutes
+PBEACON delay=120 every=30 symbol=/r lat=39^00.00N long=104^00.00W via=WIDE2-2 \
+  comment="Pi Zero 2 W + AIOC"
+
+# Enable KISS/AGW for remote monitoring or future iGate
+AGWPORT 8000
+KISSPORT 8001
+
+# Logging directory (uncomment to enable)
+# LOGDIR /var/log/direwolf
+
+# Example iGate (commented until you have passcode and want this role):
+# IGLOGIN N0CALL-10 12345
+# IGSERVER noam.aprs2.net
+# IGFILTER r/39/-104/200
+
+# End of file

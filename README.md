@@ -4,21 +4,27 @@ This repository now targets a **Raspberry Pi Zero 2 W** acting as an **APRS / AX
 
 ## Repository Layout
 ```
-pi/
-  direwolf.conf.example   # Baseline Direwolf configuration template
-  install.sh              # Bootstrap script: build & install Direwolf + service
-  OPERATIONS.md           # Calibration, monitoring, maintenance procedures
-README.md                 # (This file)
+digi/
+  direwolf.conf              # Active Direwolf config (edit MYCALL, coords)
+  direwolf.conf.example      # Reference template
+  scripts/
+    install.sh               # Build & install Direwolf
+    update.sh                # Update Direwolf from source
+    health.sh                # Quick status diagnostics
+  systemd/
+    direwolf.service         # Systemd unit file (copy to /etc/systemd/system)
+  README_LOCAL.md            # Local operational notes
+README.md                    # (This file)
 ```
 
 ## Quick Start (On the Pi)
 1. Copy repo to Pi (git clone or scp).
-2. Edit `pi/direwolf.conf.example` (set `MYCALL`, coordinates, beacon text) and copy it to `~/direwolf/direwolf.conf`.
+2. Edit `digi/direwolf.conf` (or copy from example and adjust `MYCALL`, coordinates, beacon text).
 3. Run the installer:
     ```
     sudo bash pi/install.sh
     ```
-4. Start Direwolf (if not auto-started):
+4. (Optional) Enable & start as a service:
     ```
     sudo systemctl start direwolf
     journalctl -u direwolf -f
@@ -41,7 +47,7 @@ README.md                 # (This file)
 - KISS / AGW TCP ports enabled (8000 / 8001) for future monitoring
 
 ## Operations & Calibration
-Detailed procedures: see `pi/OPERATIONS.md`.
+Detailed procedures: see `digi/README_LOCAL.md` and `digi/scripts/health.sh`.
 Includes:
 - RX/TX level tuning
 - Verifying decode

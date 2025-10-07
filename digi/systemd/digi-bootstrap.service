@@ -1,0 +1,18 @@
+[Unit]
+Description=One-shot first boot Direwolf digi bootstrap
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=!/boot/digi-bootstrap.done
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /home/packet/digi/bootstrap.sh
+User=root
+Group=root
+StandardOutput=append:/var/log/digi-bootstrap.log
+StandardError=append:/var/log/digi-bootstrap.log
+RemainAfterExit=no
+TimeoutStartSec=0
+
+[Install]
+WantedBy=multi-user.target

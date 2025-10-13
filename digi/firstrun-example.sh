@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# firstrun-example.sh -- One-shot first boot provisioning for Pidigi
+# firstrun-example.sh -- One-shot first boot provisioning for PiDigi
 # Place (renamed to firstrun.sh) on the FAT boot partition along with optional:
 #   authorized_keys      -> SSH public keys
 #   userconf.txt         -> (Optional) Raspberry Pi OS user & hashed password
@@ -13,8 +13,8 @@ echo "[FIRSTRUN] Started $(date)"
 
 # -------- Configuration (override via env if desired) --------
 PIDIGI_USER=${PIDIGI_USER:-packet}
-CLONE_URL=${CLONE_URL:-https://github.com/Dualfuel671/Pidigi.git}
-REPO_DIR=/home/${PIDIGI_USER}/Pidigi
+CLONE_URL=${CLONE_URL:-https://github.com/Dualfuel671/PiDigi.git}
+REPO_DIR=/home/${PIDIGI_USER}/PiDigi
 DIGI_DIR=/home/${PIDIGI_USER}/digi
 AUTHORIZED_KEYS_SRC=/boot/authorized_keys
 SENTINEL=/boot/pidigi-firstrun.done

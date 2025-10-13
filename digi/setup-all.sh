@@ -11,6 +11,7 @@ LAT="00^00.00N"
 LON="000^00.00E"
 ALT="0"
 COMMENT="Unified Setup Digi"
+FORCE_CONFIG=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --user) USER_OVERRIDE="$2"; shift 2;;
@@ -19,6 +20,7 @@ while [[ $# -gt 0 ]]; do
     --lon) LON="$2"; shift 2;;
     --alt) ALT="$2"; shift 2;;
     --comment) COMMENT="$2"; shift 2;;
+    --force-config) FORCE_CONFIG=1; shift 1;;
     --help|-h)
       grep '^# Usage' "$0" | sed 's/# Usage: //'
       exit 0;;
@@ -47,7 +49,7 @@ fi
 
 HOME_DIR="/home/$TARGET_USER"
 DIGI_DIR="$HOME_DIR/digi"
-REPO_ROOT="$HOME_DIR/Pidigi"
+REPO_ROOT="$HOME_DIR/PiDigi"
 AUTHORIZED_KEYS_SOURCE="/boot/authorized_keys"
 
 # -------- Dependencies --------
@@ -58,7 +60,7 @@ apt-get install -y git build-essential cmake libasound2-dev libudev-dev libgps-d
 # -------- Repo clone/update --------
 if [ ! -d "$REPO_ROOT/.git" ]; then
   echo "[SETUP] Cloning repository into $REPO_ROOT"
-  sudo -u "$TARGET_USER" git clone https://github.com/Dualfuel671/Pidigi.git "$REPO_ROOT"
+  sudo -u "$TARGET_USER" git clone https://github.com/Dualfuel671/PiDigi.git "$REPO_ROOT"
 else
   echo "[SETUP] Updating existing repository"
   (cd "$REPO_ROOT" && sudo -u "$TARGET_USER" git pull --ff-only || true)
@@ -94,15 +96,15 @@ make install
 
 # -------- Config file --------
 CONF="$DIGI_DIR/direwolf.conf"
-if [ ! -f "$CONF" ]; then
+if [ ! -f "$CONF" ] || [ "$FORCE_CONFIG" -eq 1 ]; then
   echo "[SETUP] Creating new direwolf.conf with provided parameters"
   mkdir -p "$DIGI_DIR"
   cat > "$CONF" <<EOF
-ADEVICE plughw:1,0
+ADEVICE plughw:0,0
 ACHANNELS 1
 MODEM 1200
 MYCALL $CALLSIGN
-TXDELAY 300
+TXDELAY 30
 TXTAIL 30
 DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\d)$
 PBEACON delay=30 every=15 via=WIDE2-1 symbol=/r lat=$LAT long=$LON alt=$ALT comment="$COMMENT"

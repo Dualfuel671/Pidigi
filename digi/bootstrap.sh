@@ -7,7 +7,15 @@ exec >>"$LOG" 2>&1
 
 echo "[BOOTSTRAP] Started at $(date)"
 
-TARGET_USER=${TARGET_USER:-packet}
+# Optional preseed from /boot
+ENV_FILE=/boot/pidigi.env
+if [ -f "$ENV_FILE" ]; then
+  echo "[BOOTSTRAP] Loading environment from $ENV_FILE"
+  # shellcheck source=/dev/null
+  . "$ENV_FILE"
+fi
+
+TARGET_USER=${USER:-${TARGET_USER:-packet}}
 HOME_DIR="/home/${TARGET_USER}"
 DIGI_DIR="${HOME_DIR}/digi"
 SYSTEMD_SERVICE_DST="/etc/systemd/system/direwolf.service"
@@ -69,23 +77,54 @@ make -j"$(nproc)"
 make install
 
 # 6. Ensure config exists
+# Preseeded values with defaults
+CALLSIGN=${CALLSIGN:-N0CALL-1}
+LAT=${LAT:-00^00.00N}
+LON=${LON:-000^00.00E}
+ALT=${ALT:-0}
+COMMENT=${COMMENT:-Bootstrap Digi}
+ADEVICE_RX=${ADEVICE_RX:-plughw:0,0}
+ADEVICE_TX=${ADEVICE_TX:-$ADEVICE_RX}
+ARATE=${ARATE:-48000}
+ACHANNELS_VAL=${ACHANNELS:-1}
+PTT_LINE=${PTT_LINE:-}
+PBEACON_DELAY=${PBEACON_DELAY:-30}
+PBEACON_EVERY=${PBEACON_EVERY:-15}
+PBEACON_VIA=${PBEACON_VIA:-via=WIDE2-1}
+SYMBOL=${SYMBOL:-/r}
+FORCE_CONFIG=${FORCE_CONFIG:-0}
+
 CONF="$DIGI_DIR/direwolf.conf"
-if [ ! -f "$CONF" ]; then
-  echo "[BOOTSTRAP] Creating placeholder direwolf.conf"
-  cat > "$CONF" <<'EOF'
-ADEVICE plughw:1,0
-ACHANNELS 1
-MODEM 1200
-MYCALL N0CALL-1
-TXDELAY 300
-TXTAIL 30
-DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\d)$
-PBEACON delay=30 every=15 via=WIDE2-1 symbol=/r lat=00^00.00N long=000^00.00E alt=0 comment="Bootstrap Digi"
-AGWPORT 8000
-KISSPORT 8001
-EOF
+if [ ! -f "$CONF" ] || [ "$FORCE_CONFIG" = "1" ]; then
+  echo "[BOOTSTRAP] Writing direwolf.conf (FORCE_CONFIG=$FORCE_CONFIG)"
+  mkdir -p "$DIGI_DIR"
+  {
+    echo "ADEVICE $ADEVICE_RX $ADEVICE_TX"
+    echo "ARATE $ARATE"
+    echo "ACHANNELS $ACHANNELS_VAL"
+    echo "MODEM 1200"
+    echo "MYCALL $CALLSIGN"
+    if [ -n "$PTT_LINE" ]; then
+      echo "$PTT_LINE"
+    fi
+    echo "TXDELAY 30"
+    echo "TXTAIL 30"
+    echo "DWAIT 0"
+    echo "SLOTTIME 0"
+    echo "PERSIST 63"
+    echo "DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\\d)$"
+    echo "PBEACON delay=$PBEACON_DELAY every=$PBEACON_EVERY $PBEACON_VIA symbol=$SYMBOL lat=$LAT long=$LON alt=$ALT comment=\"$COMMENT\""
+    echo "AGWPORT 8000"
+    echo "KISSPORT 8001"
+  } > "$CONF"
   chown "$TARGET_USER":"$TARGET_USER" "$CONF"
 fi
+
+# Ensure user has audio (and potentially hidraw) access
+usermod -aG audio "$TARGET_USER" || true
+case "$PTT_LINE" in
+  *CM108*|*/dev/hidraw*) usermod -aG plugdev "$TARGET_USER" 2>/dev/null || true ; usermod -aG input "$TARGET_USER" 2>/dev/null || true ;;
+esac
 
 # 7. Enable & start service
 if systemctl list-unit-files | grep -q '^direwolf.service'; then

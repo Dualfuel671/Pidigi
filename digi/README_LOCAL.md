@@ -69,47 +69,148 @@ You can safely rerun any time:
 If you want the systemd one‑shot to run again, remove the sentinel first:
 `sudo rm /boot/digi-bootstrap.done && sudo systemctl start digi-bootstrap.service`
 
-### Provision SSH keys (passwordless login)
-Place a file named `authorized_keys` on the FAT boot partition root (e.g. `D:\authorized_keys`). On first bootstrap run it will be copied into:
- - `/home/packet/.ssh/authorized_keys` (or your `TARGET_USER`)
- - `/home/pi/.ssh/authorized_keys` (if `pi` exists)
-Permissions are fixed automatically. Generate a key on Windows PowerShell:
+## Headless SD-Card Prep on Windows (no SSH)
+Goal: Prepare an SD so the Pi Zero 2 W boots without a monitor/keyboard and begins beaconing using your preloaded settings.
+
+What you need
+- Windows PC with PowerShell
+- SD card flashed with Raspberry Pi OS Lite (use Raspberry Pi Imager)
+- This repository cloned or downloaded on Windows
+
+Step 1 — Get the repo onto your Windows machine
+- Option A (Git for Windows):
+  - Install Git for Windows, then in PowerShell: `git clone https://github.com/Dualfuel671/PiDigi.git`
+- Option B (ZIP):
+  - Click “Code > Download ZIP” on GitHub, then extract the archive locally.
+
+Step 2 — Preseed station settings on the SD boot partition
+- Insert the SD; note the boot drive letter (e.g., `E:`). The boot partition is the small FAT volume visible in Windows.
+- Option A (recommended): run the helper to generate `/boot/pidigi.env`:
+  - PowerShell (as your user):
+    - `PowerShell -ExecutionPolicy Bypass -File .\digi\windows-prep-sd.ps1 -BootDriveLetter E: -Callsign KE8DCJ-1 -Lat '47^15.00N' -Lon '088^27.00W' -Alt 1260 -Comment 'AIOC Digi' -AudioName 'AllInOneCable' -CM108Hidraw 'hidraw1'`
+- Option B (manual): copy `digi/pidigi.env.example` to the boot partition and rename to `pidigi.env`, then edit values (CALLSIGN, LAT/LON, ALT, ADEVICE, PTT_LINE, etc.).
+
+Step 3 — Stage the digi files and bootstrap service onto the Linux rootfs
+Windows can’t natively write the Linux partition. Use WSL to mount the SD’s ext4 partition, or a third‑party driver.
+
+- Windows 11 (WSL supports `--mount`):
+  1. Open PowerShell as Administrator and list disks to find the SD by size:
+    - `Get-Disk`
+  2. Mount the Linux rootfs partition (typically partition 2):
+    - `wsl --mount \\.\PHYSICALDRIVE<N> --partition 2`
+    - WSL will auto-mount at: `/mnt/wsl/PHYSICALDRIVE<N>/part2`
+  3. Open your WSL distro (e.g., Ubuntu) and copy from your Windows repo (under `/mnt/c/...`) to the SD rootfs mount:
+    - `sudo mkdir -p /mnt/wsl/PHYSICALDRIVE<N>/part2/home/packet/digi`
+    - `sudo cp -r /mnt/c/Path/To/PiDigi/digi/* /mnt/wsl/PHYSICALDRIVE<N>/part2/home/packet/digi/`
+    - `sudo cp /mnt/c/Path/To/PiDigi/digi/systemd/digi-bootstrap.service /mnt/wsl/PHYSICALDRIVE<N>/part2/etc/systemd/system/digi-bootstrap.service`
+    - (optional) `sudo cp /mnt/c/Path/To/PiDigi/digi/udev/99-cm108-ptt.rules /mnt/wsl/PHYSICALDRIVE<N>/part2/etc/udev/rules.d/`
+  4. Back in Admin PowerShell, unmount when done:
+    - `wsl --unmount \\.\PHYSICALDRIVE<N>`
+
+- Windows 10:
+  - If you installed the latest WSL from the Microsoft Store and `wsl --mount` is available, follow the Windows 11 steps above.
+  - If `wsl --mount` isn’t available on your build, use one of these:
+   - Third‑party ext4 driver (e.g., “Linux File Systems for Windows by Paragon”) to mount the rootfs and copy the same files to `/home/packet/digi`, `/etc/systemd/system/`, and `/etc/udev/rules.d/`.
+   - Or use the rc.local fallback from “Offline / SD Card Bootstrap”: place `digi/bootstrap.sh` on the boot partition as `/boot/digi-bootstrap.sh` and add the rc.local line after first boot via a monitor/keyboard session if you can’t access the ext4 partition from Windows.
+
+On first boot, the one‑shot bootstrap will:
+- Create the service user if missing (default `packet` or `USER` from pidigi.env)
+- Install dependencies, clone/build Direwolf
+- Generate `/home/<user>/digi/direwolf.conf` from your `/boot/pidigi.env`
+- Add the user to audio/plugdev/input as needed
+- Enable and start Direwolf
+- Write `/boot/digi-bootstrap.done`
+
+Tip: For testing only, set `PBEACON_DELAY=5` and `PBEACON_EVERY=1` in `pidigi.env` and omit `PBEACON_VIA` to keep transmissions local. Restore a responsible interval afterward.
+
+## Troubleshooting: TX keys immediately or no tones
+- Symptom: Radio keys as soon as Direwolf starts and stays keyed.
+  - If using VOX, ensure all PTT lines are commented in `direwolf.conf` (no `PTT ...`).
+  - If using CM108 GPIO PTT, use only one PTT method. Remove serial PTT lines.
+  - CM108: stray GPIO wiring can assert PTT; verify wiring or temporarily comment `PTT CM108` to test.
+  - Some Baofeng VOX levels are very sensitive; reduce VOX level or set PTT control instead of VOX.
+- Symptom: No AFSK tones heard while keyed.
+  - Verify ALSA device and mono channel: set `ADEVICE plughw:0,0` (or per `aplay -l`) and `ACHANNELS 1`.
+  - Run `alsamixer` and select the correct sound card (F6). Raise PCM/Output and ensure not muted (MM).
+  - Foreground test for errors:
+    - Stop service: `sudo systemctl stop direwolf`
+    - Run: `/usr/local/bin/direwolf -c /home/<user>/digi/direwolf.conf -t 0`
+    - Watch for messages like "audio open error" or device busy.
+  - Increase `TXDELAY` (e.g., 30 = 300ms) if VOX clips the packet start.
+  - Confirm `MODEM 1200` is present and only one audio channel is used.
+  - If your interface uses DC-coupled audio, add a series capacitor to block PTT bias from audio path.
+
+## Verifying headless bring‑up
+- Power the Pi with the AIOC and radio connected/configured.
+- Allow several minutes on first boot (build + install). Subsequent boots are fast.
+- You should hear AFSK tones per your beacon cadence.
+
+## Working reference: AIOC + CM108 PTT
+This is a minimal, proven config for an AIOC cable using the CM108 GPIO for PTT and the AIOC audio as both RX/TX.
+
+Example `direwolf.conf` snippet:
+
 ```
-ssh-keygen -t ed25519 -f $HOME\.ssh\pidigi -C "pidigi"
-Get-Content $HOME\.ssh\pidigi.pub | Out-File -Encoding ascii D:\authorized_keys
-```
-Then connect after boot:
-```
-ssh -i $HOME/.ssh/pidigi pi@raspberrypi.local
+ADEVICE plughw:AllInOneCable,0 plughw:AllInOneCable,0
+ARATE 48000
+ACHANNELS 1
+MODEM 1200
+MYCALL KE8DCJ-1
+PTT CM108 /dev/hidraw1
+
+# Timing
+TXDELAY 30
+TXTAIL 30
+
+# Digi & beacons (set responsibly after testing)
+DIGIPEAT 0 0 ^WIDE[12]-[1-2]$ ^WIDE([12])-(\d)$
+# During testing, keep short and local (no via=):
+# PBEACON delay=5 every=1 symbol=/r lat=47^15.00N long=088^27.00W alt=1260 comment="TEST"
+# Restore to something like every=15 via=WIDE2-1 after verification.
 ```
 
-## Unified One-Step Install (after SSH login)
-Instead of running individual steps you can execute the consolidated script:
-```
-sudo bash digi/setup-all.sh --user pi --callsign N0CALL-1 --lat 00^00.00N --lon 000^00.00E --alt 0 --comment "My Digi"
-```
-Omit or adjust arguments as needed. Re-running will update the repo, rebuild Direwolf, and preserve an existing `direwolf.conf`.
+Permissions and ownership (replace <user> with your service user, e.g., `pi` or `packet`):
 
-## Keeping SSH Sessions Alive / Avoiding Disconnects
-Long builds can outlive a flaky connection. Use one of these:
-1. `tmux` (recommended):
-  ```
-  sudo apt install -y tmux
-  tmux new -s pidigi
-  # run long commands
-  # Detach: Ctrl-b then d; Reattach: tmux attach -t pidigi
-  ```
-2. OpenSSH keepalives (client side edit `~/.ssh/config` on your workstation):
-  ```
-  Host raspberrypi 192.168.* *.local
-    ServerAliveInterval 30
-    ServerAliveCountMax 4
-  ```
-3. `screen` alternative:
-  ```
-  sudo apt install -y screen
-  screen -S pidigi
-  # detach: Ctrl-a d; list: screen -ls; resume: screen -r pidigi
-  ```
-If a session drops inside tmux/screen, just reconnect via SSH and reattach—your process continues running.
+```bash
+sudo chown <user>:<user> /home/<user>/digi/direwolf.conf
+sudo chmod 640 /home/<user>/digi/direwolf.conf
+
+# Allow audio access
+sudo usermod -aG audio <user>
+
+# Allow CM108 /dev/hidraw access (group depends on your distro rules)
+# 1) Check current device permissions
+ls -l /dev/hidraw1
+
+# 2) If needed, add user to the group owning hidraw (often plugdev or input)
+sudo usermod -aG plugdev <user>  # or: sudo usermod -aG input <user>
+
+# 3) Optional: make it consistent with a udev rule for CM108
+cat | sudo tee /etc/udev/rules.d/99-cm108-ptt.rules > /dev/null <<'RULE'
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", MODE="0660", GROUP="plugdev"
+RULE
+sudo udevadm control --reload
+sudo udevadm trigger
+# Unplug/replug the AIOC afterwards
+```
+
+Foreground test and service control:
+
+```bash
+sudo systemctl stop direwolf
+/usr/local/bin/direwolf -c /home/<user>/digi/direwolf.conf -t 0
+# Expect to see PTT ON/OFF around beacon time and no ALSA errors.
+
+# When satisfied, run as a service again
+sudo systemctl start direwolf
+sudo systemctl status direwolf --no-pager
+```
+
+Optional: commit and push your working config to GitHub (from your repo root on the Pi):
+
+```bash
+git add digi/direwolf.conf digi/README_LOCAL.md
+git commit -m "AIOC CM108 working config: ALSA device, ARATE, PTT; permissions notes"
+git push
+```
 

@@ -1,0 +1,2 @@
+# Grant plugdev group access to CM108/CM108B hidraw for PTT
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="0d8c", MODE="0660", GROUP="plugdev"

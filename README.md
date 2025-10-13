@@ -66,11 +66,14 @@ Includes:
 - Use SSH keys; disable password auth in `/etc/ssh/sshd_config`
 - Restrict KISS/AGW ports (bind to localhost or firewall) if not needed externally
 
+## Windows/WSL SD-Card Prep
+If you're preparing the SD from a Windows machine with WSL, see detailed steps in `digi/README_LOCAL.md` (includes a PowerShell helper `digi/windows-prep-sd.ps1`).
+
 ## Contributing
 Pull requests welcome for: improved digipeat rules, dynamic beacon scripts, iGate integration, monitoring tooling.
 
 ## License
-Specify your chosen license (MIT / Apache-2.0 / etc.) if you plan to share publicly.
+MIT — see `LICENSE`.
 
 ---
 Removed ESP32 AFSK prototype per project pivot. If you later want to reintroduce embedded transmitter logic, create a separate branch or a `firmware/` subtree and keep Pi assets isolated.

@@ -1,5 +1,10 @@
 # Local Digi Notes
 
+- On Windows, right-click `digi/install.ps1` and choose “Run with PowerShell” (Run as Administrator). The helper mounts the SD’s ext4 partition via WSL, copies `digi/` into `/home/<user>/digi`, enables the bootstrap unit, and writes `/boot/pidigi.env` based on prompted inputs.
+- Ensure Windows Subsystem for Linux is installed with disk mounting support (`wsl --mount`). The script will abort early if prerequisites are missing.
+- After the script reports success, eject the SD card and insert it into the Pi; first boot runs the one-shot bootstrap automatically, creates `/boot/digi-bootstrap.done`, and starts Direwolf with no console or SSH required.
+- If you prefer a fully manual process or are on a platform without WSL disk support, follow “Method A” below to replicate the same layout by hand.
+
 Config: /home/packet/digi/direwolf.conf
 Service: systemd unit 'direwolf'
 Logs: (enable by uncommenting LOGDIR in config)
@@ -8,23 +13,6 @@ Scripts:
   scripts/install.sh   # Initial build
   scripts/update.sh    # Pull & rebuild
   scripts/health.sh    # Status summary
-
-Adjust beacons responsibly; avoid network congestion.
-
-Security:
-  - Use SSH keys only (disable password auth when comfortable)
-  - Keep system updated: sudo apt update && sudo apt full-upgrade -y
-
-To enable service:
-  sudo cp /home/packet/digi/systemd/direwolf.service /etc/systemd/system/
-  sudo systemctl daemon-reload
-  sudo systemctl enable --now direwolf
-  journalctl -u direwolf -f
-
-Future:
-  - iGate (uncomment IGLOGIN/IGSERVER)
-  - GPS dynamic beacon
-  - Monitoring export / Prometheus
 
 ## Offline / SD Card Bootstrap
 Low‑memory Pi Zero scenario: stage everything so the device self‑installs Direwolf + service on first boot without a heavy remote IDE session.
@@ -43,31 +31,13 @@ What the bootstrap does:
 5. Installs and enables `direwolf.service` (if not already installed) and starts it.
 6. Writes sentinel `/boot/digi-bootstrap.done` to prevent re-running automatically.
 
-### Method A (preferred): systemd one‑shot
-1. Copy the whole repo (or at minimum the `digi/` directory) into `/home/packet/digi` on the SD card rootfs (ext4 partition). Ensure ownership will be fine (it will fix user creation itself).
-2. Place `digi/systemd/digi-bootstrap.service` into `/etc/systemd/system/digi-bootstrap.service` (same path is fine if you copied the tree and then copy it over).
-3. Enable it:
-  `sudo systemctl enable digi-bootstrap.service`
-4. Boot (or reboot). Monitor progress:
-  `sudo journalctl -u digi-bootstrap.service -f`
-5. After completion verify:
-  - `ls /boot/digi-bootstrap.done`
-  - `systemctl status direwolf`
-  - `sudo less /var/log/digi-bootstrap.log`
-
-### Method B: rc.local fallback
-If you cannot (or prefer not to) install the systemd bootstrap unit yet, copy `bootstrap.sh` onto the FAT boot partition as `/boot/digi-bootstrap.sh` and add to `/etc/rc.local` before `exit 0`:
-```
-[ -x /boot/digi-bootstrap.sh ] && /boot/digi-bootstrap.sh || true
-```
-On success the script writes `/boot/digi-bootstrap.done`; you can delete that file and rerun manually if you need to re-provision.
-
-### Manual re-run
-You can safely rerun any time:
-`sudo bash /home/packet/digi/bootstrap.sh`
-
-If you want the systemd one‑shot to run again, remove the sentinel first:
-`sudo rm /boot/digi-bootstrap.done && sudo systemctl start digi-bootstrap.service`
+### Method A (preferred): systemd one-shot
+1. Copy the whole repo (or at minimum the `digi/` directory) into `/home/packet/digi` on the SD card rootfs (ext4 partition). Ownership is corrected during bootstrap.
+2. Place `digi/systemd/digi-bootstrap.service` into `/etc/systemd/system/digi-bootstrap.service` on that same rootfs.
+3. Pre-enable the one-shot by creating the symlink while the rootfs is mounted (no Pi boot required):
+  `sudo ln -s ../digi-bootstrap.service /etc/systemd/system/multi-user.target.wants/digi-bootstrap.service`
+4. Insert the SD card into the Pi and power it. The bootstrap runs automatically, then disables itself by writing `/boot/digi-bootstrap.done`.
+5. To check status later, power down, move the SD back to your workstation, and inspect `/boot/digi-bootstrap.done` and `/var/log/digi-bootstrap.log` (created on the rootfs).
 
 ## Headless SD-Card Prep on Windows (no SSH)
 Goal: Prepare an SD so the Pi Zero 2 W boots without a monitor/keyboard and begins beaconing using your preloaded settings.
@@ -85,14 +55,16 @@ Step 1 — Get the repo onto your Windows machine
 
 Step 2 — Preseed station settings on the SD boot partition
 - Insert the SD; note the boot drive letter (e.g., `E:`). The boot partition is the small FAT volume visible in Windows.
-- Option A (recommended): run the helper to generate `/boot/pidigi.env`:
-  - PowerShell (as your user):
-    - `PowerShell -ExecutionPolicy Bypass -File .\digi\windows-prep-sd.ps1 -BootDriveLetter E: -Callsign KE8DCJ-1 -Lat '47^15.00N' -Lon '088^27.00W' -Alt 1260 -Comment 'AIOC Digi' -AudioName 'AllInOneCable' -CM108Hidraw 'hidraw1'`
-- Option B (manual): copy `digi/pidigi.env.example` to the boot partition and rename to `pidigi.env`, then edit values (CALLSIGN, LAT/LON, ALT, ADEVICE, PTT_LINE, etc.).
+- If you plan to use `digi/install.ps1`, you can skip this step—the script will generate `/boot/pidigi.env` for you.
+- Manual/pre-existing workflow: copy `digi/pidigi.env.example` to the boot partition, rename it to `pidigi.env`, and edit the values (CALLSIGN, LAT/LON, ALT, ADEVICE, PTT_LINE, etc.).
 
 Step 3 — Stage the digi files and bootstrap service onto the Linux rootfs
-Windows can’t natively write the Linux partition. Use WSL to mount the SD’s ext4 partition, or a third‑party driver.
+Windows can’t natively write the Linux partition. Use the automated helper or follow the manual flow below.
 
+- **Option A (recommended):** Run `digi/install.ps1` from an elevated PowerShell window (right-click > Run with PowerShell). The script will prompt for the SD card disk number and station metadata, mount the ext4 partition via WSL, copy `digi/`, enable `digi-bootstrap.service`, place `99-cm108-ptt.rules`, and write `/boot/pidigi.env`.
+- **Option B (manual):** Use the commands below to mount and copy by hand.
+
+Manual steps if you choose Option B:
 - Windows 11 (WSL supports `--mount`):
   1. Open PowerShell as Administrator and list disks to find the SD by size:
     - `Get-Disk`
@@ -104,14 +76,13 @@ Windows can’t natively write the Linux partition. Use WSL to mount the SD’s 
     - `sudo cp -r /mnt/c/Path/To/PiDigi/digi/* /mnt/wsl/PHYSICALDRIVE<N>/part2/home/packet/digi/`
     - `sudo cp /mnt/c/Path/To/PiDigi/digi/systemd/digi-bootstrap.service /mnt/wsl/PHYSICALDRIVE<N>/part2/etc/systemd/system/digi-bootstrap.service`
     - (optional) `sudo cp /mnt/c/Path/To/PiDigi/digi/udev/99-cm108-ptt.rules /mnt/wsl/PHYSICALDRIVE<N>/part2/etc/udev/rules.d/`
+    - `sudo ln -s ../digi-bootstrap.service /mnt/wsl/PHYSICALDRIVE<N>/part2/etc/systemd/system/multi-user.target.wants/digi-bootstrap.service`
   4. Back in Admin PowerShell, unmount when done:
     - `wsl --unmount \\.\PHYSICALDRIVE<N>`
 
 - Windows 10:
   - If you installed the latest WSL from the Microsoft Store and `wsl --mount` is available, follow the Windows 11 steps above.
-  - If `wsl --mount` isn’t available on your build, use one of these:
-   - Third‑party ext4 driver (e.g., “Linux File Systems for Windows by Paragon”) to mount the rootfs and copy the same files to `/home/packet/digi`, `/etc/systemd/system/`, and `/etc/udev/rules.d/`.
-   - Or use the rc.local fallback from “Offline / SD Card Bootstrap”: place `digi/bootstrap.sh` on the boot partition as `/boot/digi-bootstrap.sh` and add the rc.local line after first boot via a monitor/keyboard session if you can’t access the ext4 partition from Windows.
+  - If `wsl --mount` isn’t available on your build, use a third-party ext4 driver (e.g., “Linux File Systems for Windows by Paragon”) to mount the rootfs and copy the same files to `/home/packet/digi`, `/etc/systemd/system/`, and `/etc/udev/rules.d/`.
 
 On first boot, the one‑shot bootstrap will:
 - Create the service user if missing (default `packet` or `USER` from pidigi.env)

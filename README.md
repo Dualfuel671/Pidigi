@@ -1,6 +1,6 @@
 # APRS Digipeater (Raspberry Pi Zero 2 W + AIOC + Baofeng UV-5R)
 
-This repository now targets a **Raspberry Pi Zero 2 W** acting as an **APRS / AX.25 1200 baud digipeater** using an **AIOC (All‑In‑One Cable)** for audio + PTT interfacing to a **Baofeng UV‑5R**. The earlier ESP32 AFSK experimental transmitter code has been removed as per project pivot (Option C). The new focus is rapid deployment of a reliable, maintainable digipeater with room for later iGate, GPS, and remote management features.
+This repository now targets a **Raspberry Pi Zero 2 W** acting as an **APRS / AX.25 1200 baud digipeater** using an **AIOC (All‑In‑One Cable)** for audio + PTT interfacing to a **Baofeng UV‑5R**. The new focus is rapid deployment of a reliable, maintainable digipeater with room for later iGate, GPS, and remote management features.
 
 ## Repository Layout
 ```
@@ -75,5 +75,3 @@ Pull requests welcome for: improved digipeat rules, dynamic beacon scripts, iGat
 ## License
 MIT — see `LICENSE`.
 
----
-Removed ESP32 AFSK prototype per project pivot. If you later want to reintroduce embedded transmitter logic, create a separate branch or a `firmware/` subtree and keep Pi assets isolated.

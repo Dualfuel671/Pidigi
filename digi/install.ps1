@@ -16,6 +16,7 @@
 [CmdletBinding()]
 param(
     [int]$DiskNumber,
+    [int]$RootfsPartitionNumber,
     [string]$Callsign,
     [string]$Latitude,
     [string]$Longitude,
@@ -26,7 +27,6 @@ param(
     [string]$Symbol = "/r",
     [string]$ServiceUser = "packet"
 )
-
 Set-StrictMode -Version 3
 $ErrorActionPreference = 'Stop'
 
@@ -60,9 +60,14 @@ function Prompt-ForValue {
 Ensure-Administrator
 Require-Command 'wsl.exe'
 Require-Command 'Get-Disk'
+Require-Command 'Get-Partition'
+Require-Command 'Get-Volume'
+Require-Command 'Remove-PartitionAccessPath'
 
 if (-not $DiskNumber) {
-    $candidateDisks = Get-Disk | Where-Object { $_.IsBoot -eq $false -and $_.IsSystem -eq $false -and $_.BusType -in ('SD','USB','MMC','SATA') -and $_.PartitionStyle -eq 'GPT' }
+    $candidateDisks = Get-Disk | Where-Object {
+        $_.IsBoot -eq $false -and $_.IsSystem -eq $false -and $_.BusType -in ('SD','USB','MMC','SATA') -and $_.PartitionStyle -in ('GPT','MBR')
+    }
     if (-not $candidateDisks) {
         throw 'No non-system GPT disks detected. Insert the SD card and retry, or specify -DiskNumber explicitly.'
     }
@@ -85,7 +90,8 @@ if ($confirm -ne 'YES') {
     return
 }
 
-$bootPartition = Get-Partition -DiskNumber $DiskNumber | Where-Object { $_.Type -like '*FAT*' -or $_.GptType -eq '{E3C9E316-0B5C-4DB8-817D-F92DF00215AE}' } | Select-Object -First 1
+$partitions = Get-Partition -DiskNumber $DiskNumber
+$bootPartition = $partitions | Where-Object { $_.Type -like '*FAT*' -or $_.GptType -eq '{E3C9E316-0B5C-4DB8-817D-F92DF00215AE}' -or $_.DriveLetter } | Select-Object -First 1
 if (-not $bootPartition) {
     throw "Unable to locate the FAT boot partition on disk #{0}." -f $DiskNumber
 }
@@ -95,11 +101,34 @@ if (-not $bootVolume.DriveLetter) {
 }
 $bootDrive = "$($bootVolume.DriveLetter):"
 
-$rootfsPartition = Get-Partition -DiskNumber $DiskNumber | Where-Object { $_.GptType -eq '{0FC63DAF-8483-4772-8E79-3D69D8477DE4}' -or $_.Type -like '*Linux*' } | Select-Object -First 1
-if (-not $rootfsPartition) {
-    throw "Unable to find a Linux rootfs partition on disk #{0}." -f $DiskNumber
+$rootfsPartition = $null
+if ($RootfsPartitionNumber) {
+    $rootfsPartition = $partitions | Where-Object { $_.PartitionNumber -eq $RootfsPartitionNumber }
+    if (-not $rootfsPartition) {
+        throw "Disk #{0} does not have a partition numbered {1}." -f $DiskNumber, $RootfsPartitionNumber
+    }
+} else {
+    $rootfsPartition = $partitions |
+        Where-Object {
+            $_.PartitionNumber -ne $bootPartition.PartitionNumber -and (
+                $_.GptType -eq '{0FC63DAF-8483-4772-8E79-3D69D8477DE4}' -or
+                $_.Type -like '*Linux*' -or
+                ($_.DriveLetter -eq $null)
+            )
+        } |
+        Sort-Object -Property Size -Descending |
+        Select-Object -First 1
+    if (-not $rootfsPartition) {
+        throw "Unable to find a Linux rootfs partition on disk #{0}. Specify -RootfsPartitionNumber if the layout is unusual." -f $DiskNumber
+    }
 }
 $rootfsPartitionNumber = $rootfsPartition.PartitionNumber
+
+if ($rootfsPartition.DriveLetter) {
+    $accessPath = "$($rootfsPartition.DriveLetter):"
+    Write-Host "Rootfs partition is currently mounted at $accessPath; removing drive letter before WSL mount..." -ForegroundColor Yellow
+    Remove-PartitionAccessPath -DiskNumber $DiskNumber -PartitionNumber $rootfsPartitionNumber -AccessPath $accessPath -ErrorAction Stop
+}
 
 if (-not $Callsign) { $Callsign = Prompt-ForValue -Prompt 'APRS CALLSIGN (e.g. KE8DCJ-1)' -Default $null }
 if (-not $Latitude) { $Latitude = Prompt-ForValue -Prompt 'Latitude (e.g. 47^15.00N)' -Default $null }

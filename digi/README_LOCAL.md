@@ -1,6 +1,6 @@
 # Local Digi Notes
 
-- On Windows, right-click `digi/install.ps1` and choose “Run with PowerShell” (Run as Administrator). The helper mounts the SD’s ext4 partition via WSL, copies `digi/` into `/home/<user>/digi`, enables the bootstrap unit, and writes `/boot/pidigi.env` based on prompted inputs.
+- On Windows, right-click `digi/install.ps1` and choose “Run with PowerShell” (Run as Administrator). The helper mounts the SD’s ext4 partition via WSL, copies `digi/` into `/home/<user>/digi`, enables the bootstrap unit, and writes `/boot/pidigi.env` based on prompted inputs. The script now supports MBR and GPT cards, automatically removes any drive letter from the ext4 partition, and you can still override with `-DiskNumber <n> -RootfsPartitionNumber 2` if needed.
 - Ensure Windows Subsystem for Linux is installed with disk mounting support (`wsl --mount`). The script will abort early if prerequisites are missing.
 - After the script reports success, eject the SD card and insert it into the Pi; first boot runs the one-shot bootstrap automatically, creates `/boot/digi-bootstrap.done`, and starts Direwolf with no console or SSH required.
 - If you prefer a fully manual process or are on a platform without WSL disk support, follow “Method A” below to replicate the same layout by hand.
@@ -46,6 +46,14 @@ What you need
 - Windows PC with PowerShell
 - SD card flashed with Raspberry Pi OS Lite (use Raspberry Pi Imager)
 - This repository cloned or downloaded on Windows
+
+### Windows 10 WSL prerequisites & gotchas
+- **Update Windows first:** `winver` should report build 19041 (version 2004) or later; Windows Update to 22H2 if needed. Older builds never expose `wsl --mount`.
+- **Enable virtualization features:** Control Panel → Turn Windows features on/off → check `Windows Subsystem for Linux`, `Virtual Machine Platform`, and (if available) `Hyper-V`. Reboot afterward.
+- **Install the Microsoft Store WSL build:** in an elevated PowerShell run `wsl --install` (or install “Windows Subsystem for Linux” from the Store), then `wsl --update` and `wsl --shutdown`.
+- **Verify disk mounting support:** `wsl --help` must list `--mount`. If it does not, you are still on the legacy inbox build—repeat the Store install/update.
+- **Close everything before staging:** exit all WSL terminals, run `wsl --shutdown`, and ensure the ext4 partition does **not** have a drive letter (the script will remove it if present). Replug the SD if Explorer latched onto it.
+-
 
 Step 1 — Get the repo onto your Windows machine
 - Option A (Git for Windows):
